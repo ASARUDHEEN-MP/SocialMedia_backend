@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-sqlalchemy_db_connect = "postgresql://postgres:1234@localhost/fastapi"
+sqlalchemy_db_connect = "postgresql://postgres:1234@localhost/socialmedia"
 engine=create_engine(sqlalchemy_db_connect)
 
 session=sessionmaker(autocommit=False, autoflush=False, bind=engine)
