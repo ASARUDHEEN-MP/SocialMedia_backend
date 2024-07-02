@@ -23,11 +23,10 @@ async def signup(user:pydantic.create_user,db:Session=Depends(getdb)):
         # check the user is already exisit
         
         # check the user is already exisit
-        
         existing_user = db.query(User).filter(User.username == user.username).first()
         
         if existing_user:
-            print("yes")
+            
             raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,detail="Uername is taken")
           # check the email is exist or not
         existing_email = db.query(User).filter(User.email==user.email).first()
@@ -41,19 +40,21 @@ async def signup(user:pydantic.create_user,db:Session=Depends(getdb)):
          
            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail="password should need atleast More than one Uppercase")
         # creating the hashpassword
-        print("hello")
+        
         userpassword=passwodhashed.create_password(user.password)
         # sending the otp to mail for verification of user
-        print("ll")
+      
         send_mail=email.createotpforuser(user.email)
         emailname=user.email
-        print("email")
+        print(send_mail)
+        
        
         # if there is otp returing from the send_email it will go with this condition else it will return the else case
         if 'otp' in send_mail:
-            
+           
             #  store the userame,password also otp in cache and also expire time of 1 min
              cache[(emailname)] = ({"otp": send_mail['otp'], "password": userpassword,"username":user.username}, datetime.now() + timedelta(minutes=10))
+           
              return {"message":"successfully send the otp to the mail"}
         else:
             return send_mail
@@ -66,7 +67,7 @@ async def signup(user:pydantic.create_user,db:Session=Depends(getdb)):
 
 
 # function after successfully send the otp and verifiying the otp and commiting to the database
-@router.post("/verify-otp")
+@router.post("/verify-otp",response_model=pydantic.signupresponse)
 async def verify_otp(otp_user:pydantic.verifyed_otp,db:Session=Depends(getdb)):
     try:
         key = (otp_user.email)
@@ -84,27 +85,31 @@ async def verify_otp(otp_user:pydantic.verifyed_otp,db:Session=Depends(getdb)):
                 users=User(username=username,email=email,hashed_password=password,is_active=True,role="user")
                 db.add(users)
                 db.commit()
+                db.refresh(users)
                 # giving the response to the user when it successfull
-                return {"message":"succesfully register your account"}
+                return users
                 
                 
         else:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="otp your return is expired please resignup")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Otp your return is expired please resignup")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f"error is founded {e}")
 
 
 
 #_____________________________________________Login_____________________________________
+def creatingjwt(id):
+    jwt_tocken=authtocken.create_tocken(data={"user_id":id})
+    return jwt_tocken
+
 @router.post("/login",status_code=status.HTTP_202_ACCEPTED)
 def login(users:OAuth2PasswordRequestForm=Depends(),db:Session=Depends(getdb)):
     # OAUTHPASSWORDREQUESTFORM has imbuild form of password and username
     try:
         # checking the user with this email is exist or not
-        print("hello")
         existing_user = db.query(User).filter(User.username == users.username).first()
         if not existing_user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="User with this USERNAME not found")
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User No exists")
         # checking the user with this email is active 
         if existing_user.is_active == False:
             raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE,detail=f"user with this email{users.email} is not active contact the admin")
@@ -114,18 +119,83 @@ def login(users:OAuth2PasswordRequestForm=Depends(),db:Session=Depends(getdb)):
         # if the user is exixit and the user is not admin it enter into this condition
         if existing_user.role =="user":
             # create the tocken for the user
-            jwt_tocken=authtocken.create_tocken(data={"user_id":existing_user.id})
+            jwt_tocken=creatingjwt(existing_user.id)
+            
             
             if not jwt_tocken:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="failed to login")
             return {
                 "tocken":jwt_tocken,
-                "tockentype":"bearer"
+                "tockentype":"bearer",
+                "username":users.username
             }
         
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,detail=f"error {e}")
     
+# create an account using facebook
+@router.post("/loginwithfacebook")
+def handle_facebook_login(data:pydantic.facebook,db:Session=Depends(getdb)):
+
+    user = db.query(User).filter((User.username == data.username) | (User.email == data.email)).first()
+    if data.fromwhere=="register":
+        if  user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User already exists")
+        users=User(username=data.username,email=data.email,is_active=True,role="user")
+        db.add(users)
+        db.commit()
+        db.refresh(users)
+        print(users)
+        return {"success": True, "message": "User created successfully"}
+    else:
+        
+        if user.role=="user":
+            jwt_tocken=creatingjwt(user.id)
+            if not jwt_tocken:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="failed to login")
+            return {
+                "tocken":jwt_tocken,
+                "tockentype":"bearer",
+                "username":data.username
+            }
+
+
+
+
+# ---------------------------personal data---------------------------
+@router.post("/personaldata")
+async def personal_data(data:pydantic.personaldata,db:Session=Depends(getdb)):
+    print(data)
+    if data.id:
+        users=db.query(User).filter(User.id==data.id).first()
+       
+        if users:
+            if data.dob:
+                users.dob=data.dob
+            if data.gender:
+               users.gender=data.gender
+            if data.profile_pic:
+               users.profile_pic=data.profile_pic
+            
+            db.commit()
+            return {"message": "Personal data saved successfully"}
+        else:
+           
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="User with this USERNAME not found")
+    else:
+        return {"error": "Try again later"}
+
+
+                
+             
+            
+             
+            
+       
+
+    
+
+# ---------------------------end-----------------------------------
 
 
 #  profile of the user check the tocken and take the user_id from user

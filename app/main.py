@@ -6,10 +6,26 @@ from .routers.oauth import models
 from . import database,apirouter
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import RedirectResponse
-
+from fastapi.middleware.cors import CORSMiddleware
 
 
 app=FastAPI()
+
+origins = [
+    "http://localhost",
+    "http://localhost:3000",  # Replace with the actual origin of your frontend
+    "http://localhost:5173",
+    # Add more origins as needed
+]
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # create database tables based on the model
 database.Base.metadata.create_all(bind=database.engine)
@@ -18,32 +34,6 @@ database.Base.metadata.create_all(bind=database.engine)
 
 # connect the routers to the from the file of apirouter 
 app.include_router(apirouter.apirouters)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # # middlware 
 # @app.middleware("http")

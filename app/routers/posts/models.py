@@ -24,7 +24,7 @@ class Post(Base):
     created_dt = Column(DateTime, default=datetime.utcnow())
     likes_count = Column(Integer, default=0)
 
-    author_id = Column(Integer, ForeignKey("users.id"))
+    author_id = Column(Integer, ForeignKey("users.id",ondelete="CASCADE"))
     author = relationship("oauth.models.User", back_populates="posts")
     hastag=relationship("Hashtag",secondary=post_hashtags,back_populates="posts")
 
